@@ -1,0 +1,167 @@
+import tkinter as tk
+from tkinter import messagebox
+import mysql.connector
+from mysql.connector import Error
+
+class LivrosApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Cadastro de Livros")
+        self.root.geometry("400x400")
+
+        # Campos de entrada para título, autor e ano
+        self.label_titulo = tk.Label(self.root, text="Título:")
+        self.label_titulo.pack(pady=5)
+        self.titulo_entry = tk.Entry(self.root)
+        self.titulo_entry.pack(pady=5)
+
+        self.label_autor = tk.Label(self.root, text="Autor:")
+        self.label_autor.pack(pady=5)
+        self.autor_entry = tk.Entry(self.root)
+        self.autor_entry.pack(pady=5)
+
+        self.label_ano = tk.Label(self.root, text="Ano:")
+        self.label_ano.pack(pady=5)
+        self.ano_entry = tk.Entry(self.root)
+        self.ano_entry.pack(pady=5)
+
+        # Botões para gravar, editar e excluir
+        self.gravar_button = tk.Button(self.root, text="Gravar", command=self.gravar_dados)
+        self.gravar_button.pack(pady=5)
+
+        self.editar_button = tk.Button(self.root, text="Editar", command=self.editar_dados)
+        self.editar_button.pack(pady=5)
+
+        self.excluir_button = tk.Button(self.root, text="Excluir", command=self.excluir_dados)
+        self.excluir_button.pack(pady=5)
+
+        # Frame para exibir dados dos livros
+        self.frame_dados = tk.LabelFrame(self.root, text="Livros Salvos", padx=10, pady=10)
+        self.frame_dados.pack(pady=10, fill="both", expand="true")
+
+        # Lista para exibir registros
+        self.lista_dados = tk.Listbox(self.frame_dados)
+        self.lista_dados.pack(pady=10, fill="both", expand="true")
+        self.lista_dados.bind("<<ListboxSelect>>", self.selecionar_dado)
+
+        # Conexão com o banco de dados
+        self.conn = self.criar_conexao()
+        if self.conn:
+            self.carregar_dados()
+
+    def criar_conexao(self):
+        try:
+            conn = mysql.connector.connect(
+                host='localhost',
+                user='root',
+                password='acesso123',
+                database='livros'
+            )
+            return conn
+        except Error as e:
+            messagebox.showerror("Erro", f'Erro ao conectar ao banco de dados: {e}')
+            self.root.destroy()
+            return None
+
+    def carregar_dados(self):
+        if not self.conn:
+            return
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT idlivros, titulo, autor, ano FROM meus_livros")
+            resultados = cursor.fetchall()
+            self.lista_dados.delete(0, tk.END)
+            for idlivros, titulo, autor, ano in resultados:
+                self.lista_dados.insert(tk.END, (idlivros, titulo, autor, ano))
+            cursor.close()
+        except Error as e:
+            messagebox.showerror("Erro", f'Erro ao carregar dados: {e}')
+
+    def gravar_dados(self):
+        titulo = self.titulo_entry.get()
+        autor = self.autor_entry.get()
+        ano = self.ano_entry.get()
+
+        if titulo and autor and ano:
+            try:
+                cursor = self.conn.cursor()
+                sql = "INSERT INTO meus_livros (titulo, autor, ano) VALUES (%s, %s, %s)"
+                cursor.execute(sql, (titulo, autor, ano))
+                self.conn.commit()
+                cursor.close()
+                messagebox.showinfo("Sucesso", "Dados gravados com sucesso!")
+                self.limpar_entradas()
+                self.carregar_dados()
+            except Error as e:
+                messagebox.showerror("Erro", f'Erro ao gravar dados: {e}')
+        else:
+            messagebox.showwarning("Atenção", "Todos os campos devem estar preenchidos.")
+
+    def editar_dados(self):
+        if hasattr(self, 'selected_id'):
+            titulo = self.titulo_entry.get()
+            autor = self.autor_entry.get()
+            ano = self.ano_entry.get()
+
+            if titulo and autor and ano:
+                try:
+                    cursor = self.conn.cursor()
+                    sql = "UPDATE meus_livros SET titulo = %s, autor = %s, ano = %s WHERE idlivros = %s"
+                    cursor.execute(sql, (titulo, autor, ano, self.selected_id))
+                    self.conn.commit()
+                    cursor.close()
+                    messagebox.showinfo("Sucesso", "Dados editados com sucesso!")
+                    self.limpar_entradas()
+                    self.carregar_dados()
+                except Error as e:
+                    messagebox.showerror("Erro", f'Erro ao editar dados: {e}')
+            else:
+                messagebox.showwarning("Atenção", "Todos os campos devem estar preenchidos para editar.")
+        else:
+            messagebox.showwarning("Atenção", "Selecione um registro para editar.")
+
+    def excluir_dados(self):
+        if hasattr(self, 'selected_id'):
+            try:
+                cursor = self.conn.cursor()
+                sql = "DELETE FROM meus_livros WHERE idlivros = %s"
+                cursor.execute(sql, (self.selected_id,))
+                self.conn.commit()
+                cursor.close()
+                messagebox.showinfo("Sucesso", "Dados excluídos com sucesso!")
+                self.limpar_entradas()
+                self.carregar_dados()
+            except Error as e:
+                messagebox.showerror("Erro", f'Erro ao excluir dados: {e}')
+        else:
+            messagebox.showwarning("Atenção", "Selecione um registro para excluir.")
+
+    def selecionar_dado(self, event):
+        try:
+            selection = self.lista_dados.curselection()
+            if selection:
+                index = selection[0]
+                self.selected_id, titulo, autor, ano = self.lista_dados.get(index)
+                self.titulo_entry.delete(0, tk.END)
+                self.titulo_entry.insert(0, titulo)
+                self.autor_entry.delete(0, tk.END)
+                self.autor_entry.insert(0, autor)
+                self.ano_entry.delete(0, tk.END)
+                self.ano_entry.insert(0, ano)
+        except Exception as e:
+            messagebox.showerror("Erro", f'Erro ao selecionar dado: {e}')
+
+    def limpar_entradas(self):
+        self.titulo_entry.delete(0, tk.END)
+        self.autor_entry.delete(0, tk.END)
+        self.ano_entry.delete(0, tk.END)
+
+    def fechar_conexao(self):
+        if self.conn:
+            self.conn.close()
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = LivrosApp(root)
+    root.protocol("WM_DELETE_WINDOW", app.fechar_conexao)
+    root.mainloop()
